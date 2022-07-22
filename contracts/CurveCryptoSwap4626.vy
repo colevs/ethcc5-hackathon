@@ -94,6 +94,7 @@ A_MULTIPLIER: constant(uint256) = 10000
 
 token: immutable(address)
 coins: immutable(address[N_COINS])
+underlying_coins: immutable(address[N_COINS])
 
 price_scale: public(uint256)   # Internal price scale
 _price_oracle: uint256  # Price target given by MA
@@ -159,6 +160,7 @@ MAX_GAMMA: constant(uint256) = 2 * 10**16
 MIN_A: constant(uint256) = N_COINS**N_COINS * A_MULTIPLIER / 10
 MAX_A: constant(uint256) = N_COINS**N_COINS * A_MULTIPLIER * 100000
 
+
 # This must be changed for different N_COINS
 # For example:
 # N_COINS = 3 -> 1  (10**18 -> 10**18)
@@ -218,6 +220,8 @@ def __init__(
     coins = _coins
     PRECISIONS = [10 ** (18 - ERC20(_coins[0]).decimals()),
                   10 ** (18 - ERC20(_coins[1]).decimals())]
+    for i in range(N_COINS):
+        underlying_coins[i] = ERC4626(coin[i]).asset()
 
 
 ### Math functions
