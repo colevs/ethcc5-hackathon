@@ -11,7 +11,7 @@ def initial_prices():
 @pytest.fixture(scope="module", autouse=True)
 def coins(project, accounts):
     yield [
-        project.ERC20Mock.deploy(name, name, 18, sender=accounts[0])
+        project.ERC4626Mock.deploy(name, name, 18, sender=accounts[0])
         for name in ["USD", "EUR"]
     ]
 
