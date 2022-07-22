@@ -1,4 +1,4 @@
-# @version 0.3.2
+# @version 0.3.3
 # forked from https://github.com/fubuloubu/ERC4626/blob/main/contracts/VyperVault.vy
 
 from vyper.interfaces import ERC20
