@@ -5,6 +5,8 @@
 # Expected coins:
 # eth/whatever
 
+import ERC4626 as ERC4626
+
 interface CurveToken:
     def totalSupply() -> uint256: view
     def mint(_to: address, _value: uint256) -> bool: nonpayable
