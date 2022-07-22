@@ -94,7 +94,7 @@ A_MULTIPLIER: constant(uint256) = 10000
 
 token: immutable(address)
 coins: immutable(address[N_COINS])
-underlying_coins: immutable(address[N_COINS])
+underlying_coins: public(address[N_COINS])
 
 price_scale: public(uint256)   # Internal price scale
 _price_oracle: uint256  # Price target given by MA
@@ -221,7 +221,7 @@ def __init__(
     PRECISIONS = [10 ** (18 - ERC20(_coins[0]).decimals()),
                   10 ** (18 - ERC20(_coins[1]).decimals())]
     for i in range(N_COINS):
-        underlying_coins[i] = ERC4626(coin[i]).asset()
+        self.underlying_coins[i] = ERC4626(coins[i]).asset()
 
 
 ### Math functions
