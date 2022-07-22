@@ -123,7 +123,7 @@ def test_immediate_withdraw(crypto_swap_with_deposit, token, coins, accounts):
             assert tuple(d_balances) == tuple(measured)
 
     else:
-        with brownie.reverts():
+        with ape.reverts():
             crypto_swap_with_deposit.remove_liquidity(token_amount, [0] * 2, sender=user)
 
 
@@ -140,7 +140,7 @@ def test_immediate_withdraw_one(crypto_swap_with_deposit, token, coins, accounts
             token_amount = random.randint(min_value, max_value)
 
             if token_amount >= token.totalSupply():
-                with brownie.reverts():
+                with ape.reverts():
                     crypto_swap_with_deposit.calc_withdraw_one_coin(token_amount, i)
 
             else:
