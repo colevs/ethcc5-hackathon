@@ -844,9 +844,9 @@ def exchange_extended(i: uint256, j: uint256, dx: uint256, min_dy: uint256,
     return self._exchange(sender, i, j, dx, min_dy, receiver, msg.sender, cb)
 
 
-@external
 @view
-def get_dy(i: uint256, j: uint256, dx: uint256) -> uint256:
+@internal
+def _get_dy(i: uint256, j: uint256, dx: uint256) -> uint256:
     assert i != j  # dev: same input and output coin
     assert i < N_COINS  # dev: coin index out of range
     assert j < N_COINS  # dev: coin index out of range
@@ -873,6 +873,18 @@ def get_dy(i: uint256, j: uint256, dx: uint256) -> uint256:
 
     return dy
 
+
+@external
+@view
+def get_dy(i: uint256, j: uint256, dx: uint256) -> uint256:
+    return self._get_dy(i, j, dx)
+
+@external
+@view
+def get_dy_underlying(i: uint256, j: uint256, dx: uint256) -> uint256:
+    shares_dx: uint256 = ERC4626(self.underlying_coins[i]).convertToShares(dx)
+    shares_dy: uint256 = self._get_dy(i, j, shares_dx)
+    return ERC4626(self.underlying_coins[i]).convertToAssets(shares_dy)
 
 @view
 @internal
