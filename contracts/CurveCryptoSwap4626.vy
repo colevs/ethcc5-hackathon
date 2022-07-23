@@ -22,6 +22,7 @@ interface ERC20:
 interface ERC4626:
     def asset() -> address: view
     def convertToShares(assetAmount: uint256) -> uint256:
+    def convertToAssets(shareAmount: uint256) -> uint256:
     def deposit(assets: uint256, receiver: address) -> uint256: nonpayable
     def withdraw(assets: uint256, receiver: address, owner: address) -> uint256: nonpayable
 
