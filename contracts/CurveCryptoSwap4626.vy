@@ -5,7 +5,6 @@
 # Expected coins:
 # eth/whatever
 
-import ERC4626 as ERC4626
 
 interface CurveToken:
     def totalSupply() -> uint256: view
@@ -19,6 +18,12 @@ interface ERC20:
     def decimals() -> uint256: view
     def balanceOf(_user: address) -> uint256: view
     def approve(_spender : address, _value : uint256) -> bool: nonpayable
+
+interface ERC4626:
+    def asset() -> address: view
+    def convertToShares(assetAmount: uint256) -> uint256:
+    def deposit(assets: uint256, receiver: address) -> uint256: nonpayable
+    def withdraw(assets: uint256, receiver: address, owner: address) -> uint256: nonpayable
 
 # Events
 event TokenExchange:
