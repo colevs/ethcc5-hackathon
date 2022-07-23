@@ -46,17 +46,10 @@ def setup():
     with boa.env.prank(user):
         for i in range(len(erc20_list)):
             erc20_list[i].approve(erc4626_list[i], 2**256 - 1)
-            erc4626_list[i].deposit(int(mint_quantity*(3/4)))
-
-
+            erc4626_list[i].deposit(int(mint_quantity * (3 / 4)))
 
     with boa.env.prank(deployer):
-        lp_token = boa.load(
-            "contracts/CurveTokenV5.vy",
-            "Curve EUR-USD",
-            "crvEURUSD"
-            )
-
+        lp_token = boa.load("contracts/CurveTokenV5.vy", "Curve EUR-USD", "crvEURUSD")
 
         pool = boa.load(
             "contracts/CurveCryptoSwap4626.vy",
@@ -73,7 +66,7 @@ def setup():
             600,  # ma_half_time
             initial_prices[0],
             lp_token.address,
-            [erc4626.address for erc4626 in erc4626_list]
+            [erc4626.address for erc4626 in erc4626_list],
         )
 
         lp_token.set_minter(pool.address)
@@ -82,7 +75,7 @@ def setup():
         for i in range(len(erc20_list)):
             erc4626_list[i].approve(pool, 2**256 - 1)
             erc20_list[i].approve(pool, 2**256 - 1)
-        quantities = [mint_quantity//2] * 2
+        quantities = [mint_quantity // 2, mint_quantity // 2 // 5]
         pool.add_liquidity(quantities, 0)
 
     return Info(deployer, user, tokens, erc20_list, erc4626_list, pool, lp_token)
