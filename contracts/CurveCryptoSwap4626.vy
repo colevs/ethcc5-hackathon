@@ -728,7 +728,7 @@ def tweak_price(A_gamma: uint256[2],_xp: uint256[N_COINS], p_i: uint256, new_D: 
 
 @internal
 def _exchange(sender: address, i: uint256, j: uint256, dx: uint256, min_dy: uint256,
-              receiver: address, callbacker: address, callback_sig: Bytes[4]) -> uint256:
+              receiver: address, callbacker: address, callback_sig: Bytes[4], _use_underlying: bool) -> uint256:
     assert not self.is_killed  # dev: the pool is killed
     assert i != j  # dev: coin index out of range
     assert i < N_COINS  # dev: coin index out of range
@@ -741,6 +741,7 @@ def _exchange(sender: address, i: uint256, j: uint256, dx: uint256, min_dy: uint
     dy: uint256 = 0
 
     _coins: address[N_COINS] = coins
+    _underlying_coins: address[N_COINS] = self.underlying_coins
 
     y: uint256 = xp[j]
     x0: uint256 = xp[i]
@@ -787,7 +788,11 @@ def _exchange(sender: address, i: uint256, j: uint256, dx: uint256, min_dy: uint
 
     # Transfer input and output at the same time
     if callback_sig == b"\x00\x00\x00\x00":
-        assert ERC20(_coins[i]).transferFrom(sender, self, dx)
+       if _use_underlying:
+            assert ERC20(_underlying_coins[i]).transferFrom(sender, self, dx)
+            ERC4626(_coins[i]).deposit(dx, self)
+       else:
+            assert ERC20(_coins[i]).transferFrom(sender, self, dx)
     else:
         c: address = _coins[i]
         b: uint256 = ERC20(c).balanceOf(self)
@@ -803,7 +808,10 @@ def _exchange(sender: address, i: uint256, j: uint256, dx: uint256, min_dy: uint
         )
         assert ERC20(c).balanceOf(self) - b == dx  # dev: callback didn't give us coins
 
-    assert ERC20(_coins[j]).transfer(receiver, dy)
+    if _use_underlying:
+        ERC4626(_coins[j]).withdraw(dx, receiver, self)
+    else:
+        assert ERC20(_coins[j]).transfer(receiver, dy)
 
     y *= prec_j
     if j > 0:
@@ -833,7 +841,14 @@ def exchange(i: uint256, j: uint256, dx: uint256, min_dy: uint256,
     """
     Exchange using WETH by default
     """
-    return self._exchange(msg.sender, i, j, dx, min_dy, receiver, ZERO_ADDRESS, b'\x00\x00\x00\x00')
+    return self._exchange(msg.sender, i, j, dx, min_dy, receiver, ZERO_ADDRESS, b'\x00\x00\x00\x00', False)
+
+@external
+@nonreentrant('lock')
+def exchange_underlying(i: uint256, j: uint256, dx: uint256, min_dy: uint256,
+             receiver: address = msg.sender) -> uint256:
+    shares_dx: uint256 = ERC4626(self.underlying_coins[i]).convertToShares(dx)
+    return self._exchange(msg.sender, i, j, shares_dx, min_dy, receiver, ZERO_ADDRESS, b'\x00\x00\x00\x00', True)
 
 
 @external
@@ -841,12 +856,12 @@ def exchange(i: uint256, j: uint256, dx: uint256, min_dy: uint256,
 def exchange_extended(i: uint256, j: uint256, dx: uint256, min_dy: uint256,
                       sender: address, receiver: address, cb: Bytes[4]) -> uint256:
     assert cb != b'\x00\x00\x00\x00'  # dev: No callback specified
-    return self._exchange(sender, i, j, dx, min_dy, receiver, msg.sender, cb)
+    return self._exchange(sender, i, j, dx, min_dy, receiver, msg.sender, cb, False)
 
 
-@external
 @view
-def get_dy(i: uint256, j: uint256, dx: uint256) -> uint256:
+@internal
+def _get_dy(i: uint256, j: uint256, dx: uint256) -> uint256:
     assert i != j  # dev: same input and output coin
     assert i < N_COINS  # dev: coin index out of range
     assert j < N_COINS  # dev: coin index out of range
@@ -873,6 +888,18 @@ def get_dy(i: uint256, j: uint256, dx: uint256) -> uint256:
 
     return dy
 
+
+@external
+@view
+def get_dy(i: uint256, j: uint256, dx: uint256) -> uint256:
+    return self._get_dy(i, j, dx)
+
+@external
+@view
+def get_dy_underlying(i: uint256, j: uint256, dx: uint256) -> uint256:
+    shares_dx: uint256 = ERC4626(self.underlying_coins[i]).convertToShares(dx)
+    shares_dy: uint256 = self._get_dy(i, j, shares_dx)
+    return ERC4626(self.underlying_coins[i]).convertToAssets(shares_dy)
 
 @view
 @internal
