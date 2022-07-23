@@ -2,16 +2,20 @@ import pytest
 import ape
 import random
 
-MAX_SAMPLES = 50
+import simulation_int_many as sim
+
+MAX_SAMPLES = 20
 
 
 def test_1st_deposit_and_last_withdraw(
-    initial_prices, crypto_swap, coins, token, accounts
+    initial_prices, crypto_swap, coins, coins_underlying, token, accounts
 ):
     user = accounts[1]
     quantities = [10**36 // p for p in [10**18] + initial_prices]  # $2 worth
-    for coin, q in zip(coins, quantities):
-        coin._mint_for_testing(user, q, sender=user)
+    for coin, coin_underlying, q in zip(coins, coins_underlying, quantities):
+        coin_underlying._mint_for_testing(user, q, sender=accounts[0])
+        coin_underlying.approve(coin, 2**256 - 1, sender=user)
+        coin.deposit(q, sender=user)
         coin.approve(crypto_swap, 2**256 - 1, sender=user)
 
     # Very first deposit
@@ -28,7 +32,7 @@ def test_1st_deposit_and_last_withdraw(
 
 
 def test_second_deposit(
-    initial_prices, crypto_swap_with_deposit, token, coins, accounts
+    initial_prices, crypto_swap_with_deposit, token, coins, coins_underlying, accounts
 ):
     min_value = 10**16
     max_value = 10**9 * 10**18
@@ -54,8 +58,11 @@ def test_second_deposit(
             f >= 1.1e16 and f <= 0.9e20 for f in [_x * 10**18 // _D for _x in xp]
         )
 
-        for c, v in zip(coins, amounts):
-            c._mint_for_testing(user, v, sender=user)
+        for c, c_u, v in zip(coins, coins_underlying, amounts):
+            c_u._mint_for_testing(user, v, sender=user)
+            c_u.approve(c, 2**256 - 1, sender=user)
+            c.deposit(v, sender=user)
+            c.approve(crypto_swap_with_deposit, 2**256 - 1, sender=user)
 
         try:
             calculated = crypto_swap_with_deposit.calc_token_amount(amounts)
@@ -82,7 +89,7 @@ def test_second_deposit(
 
 
 def test_second_deposit_one(
-    initial_prices, crypto_swap_with_deposit, token, coins, accounts
+    initial_prices, crypto_swap_with_deposit, token, coins, coins_underlying, accounts
 ):
     min_value = 10**16
     max_value = 10**6 * 10**18
@@ -96,8 +103,11 @@ def test_second_deposit_one(
             user = accounts[1]
             amounts = [0] * 2
             amounts[i] = value * 10**18 // ([10**18] + initial_prices)[i]
-            for c, v in zip(coins, amounts):
-                c._mint_for_testing(user, v, user)
+            for c, c_u, v in zip(coins, coins_underlying, amounts):
+                c_u._mint_for_testing(user, v, sender=user)
+                c_u.approve(c, 2**256 - 1, sender=user)
+                c.deposit(v, sender=user)
+                c.approve(crypto_swap_with_deposit, 2**256 - 1, sender=user)
 
             calculated = crypto_swap_with_deposit.calc_token_amount(amounts)
             measured = token.balanceOf(user)
@@ -114,7 +124,7 @@ def test_second_deposit_one(
             assert tuple(amounts) == tuple(d_balances)
 
 
-def test_immediate_withdraw(crypto_swap_with_deposit, token, coins, accounts):
+def test_immediate_withdraw(crypto_swap_with_deposit, token, coins, coins_underlying, accounts):
     user = accounts[1]
     min_value = 10**12
     max_value = 4000 * 10**18
@@ -140,15 +150,15 @@ def test_immediate_withdraw(crypto_swap_with_deposit, token, coins, accounts):
 
             assert tuple(d_balances) == tuple(measured)
 
-    else:
-        with ape.reverts():
-            crypto_swap_with_deposit.remove_liquidity(
-                token_amount, [0] * 2, sender=user
-            )
+        else:
+            with ape.reverts():
+                crypto_swap_with_deposit.remove_liquidity(
+                    token_amount, [0] * 2, sender=user
+                )
 
 
 def test_immediate_withdraw_one(
-    initial_prices, crypto_swap_with_deposit, token, coins, accounts
+    initial_prices, crypto_swap_with_deposit, token, coins, coins_underlying, accounts
 ):
     user = accounts[1]
 
