@@ -1,6 +1,7 @@
 import boa
 from dataclasses import dataclass
 
+
 @dataclass
 class Info:
     deployer: str
@@ -14,7 +15,8 @@ def setup():
     deployer = "0x0000000000000000000000000000000000001234"
     user = "0x0000000000000000000000000000000000001235"
 
-    tokens = ["USD", "EUR"]
+    tokens = ["USDC", "ETH"]
+    prepends = ["y", "a"]
     mint_quantity = 5 * 10**6 * 10**18  # 5 million
 
     erc20_list = [None] * len(tokens)
@@ -22,9 +24,18 @@ def setup():
 
     with boa.env.prank(deployer):
         for i in range(len(tokens)):
-            erc20_list[i] = boa.load("contracts/testing/ERC20Mock.vy", tokens[i], tokens[i], 18)
-            erc4626_list[i] = boa.load("contracts/testing/ERC4626Mock.vy", erc20_list[i].address)
-            
+            erc20_list[i] = boa.load(
+                "contracts/testing/ERC20Mock.vy", tokens[i], tokens[i], 18
+            )
+            vault_token = prepends[i] + tokens[i]
+            erc4626_list[i] = boa.load(
+                "contracts/testing/ERC4626Mock.vy",
+                erc20_list[i].address,
+                vault_token,
+                vault_token,
+                18,
+            )
+
         for erc20 in erc20_list:
             erc20._mint_for_testing(user, mint_quantity)
 
@@ -34,4 +45,3 @@ def setup():
             erc4626_list[i].deposit(mint_quantity)
 
     return Info(deployer, user, tokens, erc20_list, erc4626_list)
-

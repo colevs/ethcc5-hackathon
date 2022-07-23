@@ -11,9 +11,9 @@ totalSupply: public(uint256)
 balanceOf: public(HashMap[address, uint256])
 allowance: public(HashMap[address, HashMap[address, uint256]])
 
-NAME: constant(String[10]) = "Test Vault"
-SYMBOL: constant(String[5]) = "vTEST"
-DECIMALS: constant(uint8) = 18
+name: public(String[64])
+symbol: public(String[32])
+decimals: public(uint8)
 
 event Transfer:
     sender: indexed(address)
@@ -44,26 +44,11 @@ event Withdraw:
 
 
 @external
-def __init__(asset: ERC20):
-    self.asset = asset
-
-
-@view
-@external
-def name() -> String[10]:
-    return NAME
-
-
-@view
-@external
-def symbol() -> String[5]:
-    return SYMBOL
-
-
-@view
-@external
-def decimals() -> uint8:
-    return DECIMALS
+def __init__(_asset: ERC20, _name: String[64], _symbol: String[32], _decimals: uint8):
+    self.asset = _asset
+    self.name = _name
+    self.symbol = _symbol
+    self.decimals = _decimals
 
 
 @external
