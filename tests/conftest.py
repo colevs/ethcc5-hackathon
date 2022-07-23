@@ -9,18 +9,18 @@ def initial_prices():
 
 
 @pytest.fixture(scope="module", autouse=True)
-def underlying_assets(project, accounts):
+def coins_underlying(project, accounts):
     yield [
-        project.ERC20.deploy(name, name, 18, sender=accounts[0])
+        project.ERC20Mock.deploy(name, name, 18, sender=accounts[0])
         for name in ["USD", "EUR"]
     ]
 
 
 @pytest.fixture(scope="module", autouse=True)
-def coins(project, accounts, underlying_assets):
+def coins(project, accounts, coins_underlying):
     yield [
-        project.ERC4626Mock.deploy(asset)
-        for asset in underlying_assets
+        project.ERC4626Mock.deploy(asset, sender=accounts[0])
+        for asset in coins_underlying
     ]
 
 
@@ -53,11 +53,13 @@ def crypto_swap(project, token, coins, accounts):
     return swap
 
 
-def _crypto_swap_with_deposit(crypto_swap, coins, accounts):
+def _crypto_swap_with_deposit(crypto_swap, coins_underlying, coins, accounts):
     user = accounts[1]
     quantities = [10**6 * 10**36 // p for p in [10**18] + INITIAL_PRICES]
-    for coin, q in zip(coins, quantities):
-        coin._mint_for_testing(user, q, sender=accounts[0])
+    for coin_underlying, coin, q in zip(coins_underlying, coins, quantities):
+        coin_underlying._mint_for_testing(user, q, sender=accounts[0])
+        coin_underlying.approve(coin, 2**256 - 1, sender=user)
+        coin.deposit(q, sender=user)
         coin.approve(crypto_swap, 2**256 - 1, sender=user)
 
     # Very first deposit
@@ -67,8 +69,8 @@ def _crypto_swap_with_deposit(crypto_swap, coins, accounts):
 
 
 @pytest.fixture(scope="module")
-def crypto_swap_with_deposit(crypto_swap, coins, accounts):
-    return _crypto_swap_with_deposit(crypto_swap, coins, accounts)
+def crypto_swap_with_deposit(crypto_swap, coins_underlying, coins, accounts):
+    return _crypto_swap_with_deposit(crypto_swap, coins_underlying, coins, accounts)
 
 
 # @pytest.fixture(autouse=True)

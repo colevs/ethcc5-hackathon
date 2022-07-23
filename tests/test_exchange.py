@@ -14,7 +14,7 @@ amount_min = 10**6
 amount_max = 2 * 10**6 * 10**18
 
 
-def test_exchange(initial_prices, crypto_swap_with_deposit, token, coins, accounts):
+def test_exchange(initial_prices, crypto_swap_with_deposit, token, coins, coins_underlying, accounts):
     for sample in range(SAMPLES):
         amount = random.randint(amount_min, amount_max)
 
@@ -32,7 +32,9 @@ def test_exchange(initial_prices, crypto_swap_with_deposit, token, coins, accoun
                 else:
                     prices = [10**18] + initial_prices
                     amount = amount * 10**18 // prices[i]
-                    coins[i]._mint_for_testing(user, amount, sender=accounts[0])
+                    coins_underlying[i]._mint_for_testing(user, amount, sender=accounts[0])
+                    coins_underlying[i].approve(coins[i], 2**256 - 1, sender=user)
+                    coins[i].deposit(amount, sender=user)
 
                     calculated = crypto_swap_with_deposit.get_dy(i, j, amount)
                     measured_i = coins[i].balanceOf(user)
