@@ -9,10 +9,18 @@ def initial_prices():
 
 
 @pytest.fixture(scope="module", autouse=True)
-def coins(project, accounts):
+def underlying_assets(project, accounts):
     yield [
-        project.ERC4626Mock.deploy(name, name, 18, sender=accounts[0])
+        project.ERC20.deploy(name, name, 18, sender=accounts[0])
         for name in ["USD", "EUR"]
+    ]
+
+
+@pytest.fixture(scope="module", autouse=True)
+def coins(project, accounts, underlying_assets):
+    yield [
+        project.ERC4626Mock.deploy(asset)
+        for asset in underlying_assets
     ]
 
 
