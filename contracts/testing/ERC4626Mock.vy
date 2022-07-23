@@ -1,7 +1,6 @@
-# @version 0.3.2
+# @version 0.3.4
 from vyper.interfaces import ERC20
-
-import ERC4626 as ERC4626
+from vyper.interfaces import ERC4626
 
 implements: ERC20
 implements: ERC4626
