@@ -75,4 +75,6 @@ def setup():
             [erc4626.address for erc4626 in erc4626_list]
         )
 
+        lp_token.set_minter(pool.address)
+
     return Info(deployer, user, tokens, erc20_list, erc4626_list, pool, lp_token)
