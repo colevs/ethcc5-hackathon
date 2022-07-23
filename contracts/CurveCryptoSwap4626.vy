@@ -795,7 +795,7 @@ def _exchange(sender: address, i: uint256, j: uint256, dx: uint256, min_dy: uint
     # Transfer input and output at the same time
     if callback_sig == b"\x00\x00\x00\x00":
        if _use_underlying:
-            assert ERC20(_underlying_coins[i]).transferFrom(sender, self, dx)
+            assert ERC20(self.underlying_coins[i]).transferFrom(sender, self, dx)
             ERC4626(_coins[i]).deposit(dx, self)
        else:
             assert ERC20(_coins[i]).transferFrom(sender, self, dx)
@@ -853,7 +853,7 @@ def exchange(i: uint256, j: uint256, dx: uint256, min_dy: uint256,
 @nonreentrant('lock')
 def exchange_underlying(i: uint256, j: uint256, dx: uint256, min_dy: uint256,
              receiver: address = msg.sender) -> uint256:
-    shares_dx: uint256 = ERC4626(self.underlying_coins[i]).convertToShares(dx)
+    shares_dx: uint256 = ERC4626(coins[i]).convertToShares(dx)
     return self._exchange(msg.sender, i, j, shares_dx, min_dy, receiver, ZERO_ADDRESS, b'\x00\x00\x00\x00', True)
 
 
