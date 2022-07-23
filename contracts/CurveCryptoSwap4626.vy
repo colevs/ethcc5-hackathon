@@ -18,6 +18,7 @@ interface ERC20:
     def transferFrom(_from: address, _to: address, _value: uint256) -> bool: nonpayable
     def decimals() -> uint256: view
     def balanceOf(_user: address) -> uint256: view
+    def approve(_spender : address, _value : uint256) -> bool: nonpayable
 
 # Events
 event TokenExchange:
@@ -221,8 +222,10 @@ def __init__(
     PRECISIONS = [10 ** (18 - ERC20(_coins[0]).decimals()),
                   10 ** (18 - ERC20(_coins[1]).decimals())]
     for i in range(N_COINS):
-        self.underlying_coins[i] = ERC4626(coins[i]).asset()
-
+        coin: address = coins[i]
+        underlying_coin: address = ERC4626(coin).asset()
+        self.underlying_coins[i] = underlying_coin
+        ERC20(underlying_coin).approve(coin, MAX_UINT256)
 
 ### Math functions
 @internal
@@ -466,7 +469,6 @@ def token() -> address:
 def coins(i: uint256) -> address:
     _coins: address[N_COINS] = coins
     return _coins[i]
-
 
 @internal
 @view
@@ -892,13 +894,14 @@ def _calc_token_fee(amounts: uint256[N_COINS], xp: uint256[N_COINS]) -> uint256:
 
 @external
 @nonreentrant('lock')
-def add_liquidity(amounts: uint256[N_COINS], min_mint_amount: uint256, receiver: address = msg.sender) -> uint256:
+def add_liquidity(amounts: uint256[N_COINS], min_mint_amount: uint256, receiver: address = msg.sender, use_underlying: bool = False) -> uint256:
     assert not self.is_killed  # dev: the pool is killed
     assert amounts[0] > 0 or amounts[1] > 0  # dev: no coins to add
 
     A_gamma: uint256[2] = self._A_gamma()
 
     _coins: address[N_COINS] = coins
+    _underlying_coins: address[N_COINS] = self.underlying_coins
 
     xp: uint256[N_COINS] = self.balances
     amountsp: uint256[N_COINS] = empty(uint256[N_COINS])
@@ -921,8 +924,13 @@ def add_liquidity(amounts: uint256[N_COINS], min_mint_amount: uint256, receiver:
 
     for i in range(N_COINS):
         if amounts[i] > 0:
-            assert ERC20(_coins[i]).transferFrom(msg.sender, self, amounts[i])
-            amountsp[i] = xp[i] - xp_old[i]
+            if use_underlying:
+                assert ERC20(_underlying_coins[i]).transferFrom(msg.sender, self, amounts[i])
+                ERC4626(_coins[i]).deposit(amounts[i], self)
+                amountsp[i] = xp[i] - xp_old[i]
+            else:
+                assert ERC20(coins[i]).transferFrom(msg.sender, self, amounts[i])
+
     assert amounts[0] > 0 or amounts[1] > 0  # dev: no coins to add
 
     t: uint256 = self.future_A_gamma_time
