@@ -19,7 +19,7 @@ def setup():
 
     tokens = ["USDC", "ETH"]
     prepends = ["y", "a"]
-    mint_quantity = 5 * 10**6 * 10**18  # 5 million
+    mint_quantity = 10 * 10**6 * 10**18  # 5 million
 
     initial_prices = [int(0.8 * 10**18)]
 
@@ -46,7 +46,8 @@ def setup():
     with boa.env.prank(user):
         for i in range(len(erc20_list)):
             erc20_list[i].approve(erc4626_list[i], 2**256 - 1)
-            erc4626_list[i].deposit(mint_quantity)
+            erc4626_list[i].deposit(int(mint_quantity*(3/4)))
+
 
 
     with boa.env.prank(deployer):
@@ -76,5 +77,12 @@ def setup():
         )
 
         lp_token.set_minter(pool.address)
+
+    with boa.env.prank(user):
+        for i in range(len(erc20_list)):
+            erc4626_list[i].approve(pool, 2**256 - 1)
+            erc20_list[i].approve(pool, 2**256 - 1)
+        quantities = [mint_quantity//2] * 2
+        pool.add_liquidity(quantities, 0)
 
     return Info(deployer, user, tokens, erc20_list, erc4626_list, pool, lp_token)
