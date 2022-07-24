@@ -1,11 +1,10 @@
-# @version 0.3.3
+# @version 0.3.4
 # (c) Curve.Fi, 2022
 # Pool for two crypto assets
 
 # Expected coins:
 # eth/whatever
 
-import ERC4626 as ERC4626
 
 interface CurveToken:
     def totalSupply() -> uint256: view
@@ -18,6 +17,14 @@ interface ERC20:
     def transferFrom(_from: address, _to: address, _value: uint256) -> bool: nonpayable
     def decimals() -> uint256: view
     def balanceOf(_user: address) -> uint256: view
+    def approve(_spender : address, _value : uint256) -> bool: nonpayable
+
+interface ERC4626:
+    def asset() -> address: view
+    def convertToShares(assetAmount: uint256) -> uint256: view
+    def convertToAssets(shareAmount: uint256) -> uint256: view
+    def deposit(assets: uint256, receiver: address) -> uint256: nonpayable
+    def withdraw(assets: uint256, receiver: address, owner: address) -> uint256: nonpayable
 
 # Events
 event TokenExchange:
@@ -94,6 +101,7 @@ A_MULTIPLIER: constant(uint256) = 10000
 
 token: immutable(address)
 coins: immutable(address[N_COINS])
+underlying_coins: public(address[N_COINS])
 
 price_scale: public(uint256)   # Internal price scale
 _price_oracle: uint256  # Price target given by MA
@@ -159,6 +167,7 @@ MAX_GAMMA: constant(uint256) = 2 * 10**16
 MIN_A: constant(uint256) = N_COINS**N_COINS * A_MULTIPLIER / 10
 MAX_A: constant(uint256) = N_COINS**N_COINS * A_MULTIPLIER * 100000
 
+
 # This must be changed for different N_COINS
 # For example:
 # N_COINS = 3 -> 1  (10**18 -> 10**18)
@@ -191,7 +200,7 @@ def __init__(
     # Pack A and gamma:
     # shifted A + gamma
     A_gamma: uint256 = shift(A, 128)
-    A_gamma = bitwise_or(A_gamma, gamma)
+    A_gamma = (A_gamma | gamma)
     self.initial_A_gamma = A_gamma
     self.future_A_gamma = A_gamma
 
@@ -218,7 +227,11 @@ def __init__(
     coins = _coins
     PRECISIONS = [10 ** (18 - ERC20(_coins[0]).decimals()),
                   10 ** (18 - ERC20(_coins[1]).decimals())]
-
+    for i in range(N_COINS):
+        coin: address = coins[i]
+        underlying_coin: address = ERC4626(coin).asset()
+        self.underlying_coins[i] = underlying_coin
+        ERC20(underlying_coin).approve(coin, MAX_UINT256)
 
 ### Math functions
 @internal
@@ -463,7 +476,6 @@ def coins(i: uint256) -> address:
     _coins: address[N_COINS] = coins
     return _coins[i]
 
-
 @internal
 @view
 def xp() -> uint256[N_COINS]:
@@ -477,7 +489,7 @@ def _A_gamma() -> uint256[2]:
     t1: uint256 = self.future_A_gamma_time
 
     A_gamma_1: uint256 = self.future_A_gamma
-    gamma1: uint256 = bitwise_and(A_gamma_1, 2**128-1)
+    gamma1: uint256 = (A_gamma_1) & (2**128-1)
     A1: uint256 = shift(A_gamma_1, -128)
 
     if block.timestamp < t1:
@@ -496,7 +508,7 @@ def _A_gamma() -> uint256[2]:
         t2: uint256 = t1 - t0
 
         A1 = (shift(A_gamma_0, -128) * t2 + A1 * t0) / t1
-        gamma1 = (bitwise_and(A_gamma_0, 2**128-1) * t2 + gamma1 * t0) / t1
+        gamma1 = ((A_gamma_0) & (2**128-1) * t2 + gamma1 * t0) / t1
 
     return [A1, gamma1]
 
@@ -722,7 +734,7 @@ def tweak_price(A_gamma: uint256[2],_xp: uint256[N_COINS], p_i: uint256, new_D: 
 
 @internal
 def _exchange(sender: address, i: uint256, j: uint256, dx: uint256, min_dy: uint256,
-              receiver: address, callbacker: address, callback_sig: Bytes[4]) -> uint256:
+              receiver: address, callbacker: address, callback_sig: Bytes[4], _use_underlying: bool) -> uint256:
     assert not self.is_killed  # dev: the pool is killed
     assert i != j  # dev: coin index out of range
     assert i < N_COINS  # dev: coin index out of range
@@ -735,6 +747,7 @@ def _exchange(sender: address, i: uint256, j: uint256, dx: uint256, min_dy: uint
     dy: uint256 = 0
 
     _coins: address[N_COINS] = coins
+    _underlying_coins: address[N_COINS] = self.underlying_coins
 
     y: uint256 = xp[j]
     x0: uint256 = xp[i]
@@ -781,7 +794,11 @@ def _exchange(sender: address, i: uint256, j: uint256, dx: uint256, min_dy: uint
 
     # Transfer input and output at the same time
     if callback_sig == b"\x00\x00\x00\x00":
-        assert ERC20(_coins[i]).transferFrom(sender, self, dx)
+       if _use_underlying:
+            assert ERC20(self.underlying_coins[i]).transferFrom(sender, self, dx)
+            ERC4626(_coins[i]).deposit(dx, self)
+       else:
+            assert ERC20(_coins[i]).transferFrom(sender, self, dx)
     else:
         c: address = _coins[i]
         b: uint256 = ERC20(c).balanceOf(self)
@@ -797,7 +814,10 @@ def _exchange(sender: address, i: uint256, j: uint256, dx: uint256, min_dy: uint
         )
         assert ERC20(c).balanceOf(self) - b == dx  # dev: callback didn't give us coins
 
-    assert ERC20(_coins[j]).transfer(receiver, dy)
+    if _use_underlying:
+        ERC4626(_coins[j]).withdraw(dx, receiver, self)
+    else:
+        assert ERC20(_coins[j]).transfer(receiver, dy)
 
     y *= prec_j
     if j > 0:
@@ -827,7 +847,14 @@ def exchange(i: uint256, j: uint256, dx: uint256, min_dy: uint256,
     """
     Exchange using WETH by default
     """
-    return self._exchange(msg.sender, i, j, dx, min_dy, receiver, ZERO_ADDRESS, b'\x00\x00\x00\x00')
+    return self._exchange(msg.sender, i, j, dx, min_dy, receiver, ZERO_ADDRESS, b'\x00\x00\x00\x00', False)
+
+@external
+@nonreentrant('lock')
+def exchange_underlying(i: uint256, j: uint256, dx: uint256, min_dy: uint256,
+             receiver: address = msg.sender) -> uint256:
+    shares_dx: uint256 = ERC4626(coins[i]).convertToShares(dx)
+    return self._exchange(msg.sender, i, j, shares_dx, min_dy, receiver, ZERO_ADDRESS, b'\x00\x00\x00\x00', True)
 
 
 @external
@@ -835,12 +862,12 @@ def exchange(i: uint256, j: uint256, dx: uint256, min_dy: uint256,
 def exchange_extended(i: uint256, j: uint256, dx: uint256, min_dy: uint256,
                       sender: address, receiver: address, cb: Bytes[4]) -> uint256:
     assert cb != b'\x00\x00\x00\x00'  # dev: No callback specified
-    return self._exchange(sender, i, j, dx, min_dy, receiver, msg.sender, cb)
+    return self._exchange(sender, i, j, dx, min_dy, receiver, msg.sender, cb, False)
 
 
-@external
 @view
-def get_dy(i: uint256, j: uint256, dx: uint256) -> uint256:
+@internal
+def _get_dy(i: uint256, j: uint256, dx: uint256) -> uint256:
     assert i != j  # dev: same input and output coin
     assert i < N_COINS  # dev: coin index out of range
     assert j < N_COINS  # dev: coin index out of range
@@ -868,6 +895,18 @@ def get_dy(i: uint256, j: uint256, dx: uint256) -> uint256:
     return dy
 
 
+@external
+@view
+def get_dy(i: uint256, j: uint256, dx: uint256) -> uint256:
+    return self._get_dy(i, j, dx)
+
+@external
+@view
+def get_dy_underlying(i: uint256, j: uint256, dx: uint256) -> uint256:
+    shares_dx: uint256 = ERC4626(self.underlying_coins[i]).convertToShares(dx)
+    shares_dy: uint256 = self._get_dy(i, j, shares_dx)
+    return ERC4626(self.underlying_coins[i]).convertToAssets(shares_dy)
+
 @view
 @internal
 def _calc_token_fee(amounts: uint256[N_COINS], xp: uint256[N_COINS]) -> uint256:
@@ -888,13 +927,14 @@ def _calc_token_fee(amounts: uint256[N_COINS], xp: uint256[N_COINS]) -> uint256:
 
 @external
 @nonreentrant('lock')
-def add_liquidity(amounts: uint256[N_COINS], min_mint_amount: uint256, receiver: address = msg.sender) -> uint256:
+def add_liquidity(amounts: uint256[N_COINS], min_mint_amount: uint256, receiver: address = msg.sender, use_underlying: bool = False) -> uint256:
     assert not self.is_killed  # dev: the pool is killed
     assert amounts[0] > 0 or amounts[1] > 0  # dev: no coins to add
 
     A_gamma: uint256[2] = self._A_gamma()
 
     _coins: address[N_COINS] = coins
+    _underlying_coins: address[N_COINS] = self.underlying_coins
 
     xp: uint256[N_COINS] = self.balances
     amountsp: uint256[N_COINS] = empty(uint256[N_COINS])
@@ -917,8 +957,13 @@ def add_liquidity(amounts: uint256[N_COINS], min_mint_amount: uint256, receiver:
 
     for i in range(N_COINS):
         if amounts[i] > 0:
-            assert ERC20(_coins[i]).transferFrom(msg.sender, self, amounts[i])
-            amountsp[i] = xp[i] - xp_old[i]
+            if use_underlying:
+                assert ERC20(_underlying_coins[i]).transferFrom(msg.sender, self, amounts[i])
+                ERC4626(_coins[i]).deposit(amounts[i], self)
+                amountsp[i] = xp[i] - xp_old[i]
+            else:
+                assert ERC20(coins[i]).transferFrom(msg.sender, self, amounts[i])
+
     assert amounts[0] > 0 or amounts[1] > 0  # dev: no coins to add
 
     t: uint256 = self.future_A_gamma_time
@@ -1128,7 +1173,7 @@ def ramp_A_gamma(future_A: uint256, future_gamma: uint256, future_time: uint256)
 
     A_gamma: uint256[2] = self._A_gamma()
     initial_A_gamma: uint256 = shift(A_gamma[0], 128)
-    initial_A_gamma = bitwise_or(initial_A_gamma, A_gamma[1])
+    initial_A_gamma = (initial_A_gamma) | (A_gamma[1])
 
     assert future_A > MIN_A-1
     assert future_A < MAX_A+1
@@ -1147,7 +1192,7 @@ def ramp_A_gamma(future_A: uint256, future_gamma: uint256, future_time: uint256)
     self.initial_A_gamma_time = block.timestamp
 
     future_A_gamma: uint256 = shift(future_A, 128)
-    future_A_gamma = bitwise_or(future_A_gamma, future_gamma)
+    future_A_gamma = (future_A_gamma | future_gamma)
     self.future_A_gamma_time = future_time
     self.future_A_gamma = future_A_gamma
 
@@ -1160,7 +1205,7 @@ def stop_ramp_A_gamma():
 
     A_gamma: uint256[2] = self._A_gamma()
     current_A_gamma: uint256 = shift(A_gamma[0], 128)
-    current_A_gamma = bitwise_or(current_A_gamma, A_gamma[1])
+    current_A_gamma = (current_A_gamma | A_gamma[1])
     self.initial_A_gamma = current_A_gamma
     self.future_A_gamma = current_A_gamma
     self.initial_A_gamma_time = block.timestamp
