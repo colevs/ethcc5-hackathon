@@ -21,7 +21,7 @@ def setup():
     prepends = ["y", "a"]
     mint_quantity = 10 * 10**6 * 10**18  # 5 million
 
-    initial_prices = [int(0.8 * 10**18)]
+    initial_prices = [int(1500 * 10**18)]
 
     erc20_list = [None] * len(tokens)
     erc4626_list = [None] * len(tokens)
