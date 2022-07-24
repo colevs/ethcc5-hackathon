@@ -17,7 +17,7 @@ def setup():
     deployer = "0x0000000000000000000000000000000000001234"
     user = "0x0000000000000000000000000000000000001235"
 
-    tokens = ["USDC", "ETH"]
+    tokens = ["USDC", "WETH"]
     prepends = ["y", "a"]
     mint_quantity = 10 * 10**6 * 10**18  # 5 million
 
