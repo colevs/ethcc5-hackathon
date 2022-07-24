@@ -19,8 +19,8 @@ def coins_underlying(project, accounts):
 @pytest.fixture(scope="module", autouse=True)
 def coins(project, accounts, coins_underlying):
     yield [
-        project.ERC4626Mock.deploy(asset, sender=accounts[0])
-        for asset in coins_underlying
+        project.ERC4626Mock.deploy(asset, name, name, 18, sender=accounts[0])
+        for asset, name in zip(coins_underlying, ["USD, EUR"])
     ]
 
 
